@@ -66,10 +66,11 @@ def health() -> dict[str, str]:
     "/api/search",
     response_model=SearchResponse,
     tags=["search"],
-    summary="리뷰 코멘트 검색 (유사 답변 그룹화)",
+    summary="리뷰 코멘트 검색 (답변 방향성 그룹화)",
     description=(
-        "자연어 query로 conversation document를 검색한 뒤 비슷한 의도의 답변끼리 그룹화한다. "
-        "각 그룹(items[])은 화면 인사이트 카드 한 장에 대응하며, 대표 요약과 PR 아웃링크를 포함한다."
+        "자연어 query로 conversation document를 검색한 뒤 공식 리뷰어의 개별 답변을 추출하고, "
+        "비슷한 방향성의 답변끼리 그룹화한다. 각 그룹(items[])은 화면 인사이트 카드 한 장에 "
+        "대응하며, 대표 요약과 개별 GitHub comment 아웃링크를 포함한다."
     ),
 )
 def search(

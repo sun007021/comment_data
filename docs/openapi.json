@@ -32,8 +32,8 @@
         "tags": [
           "search"
         ],
-        "summary": "리뷰 코멘트 검색 (유사 답변 그룹화)",
-        "description": "자연어 query로 conversation document를 검색한 뒤 비슷한 의도의 답변끼리 그룹화한다. 각 그룹(items[])은 화면 인사이트 카드 한 장에 대응하며, 대표 요약과 PR 아웃링크를 포함한다.",
+        "summary": "리뷰 코멘트 검색 (답변 방향성 그룹화)",
+        "description": "자연어 query로 conversation document를 검색한 뒤 공식 리뷰어의 개별 답변을 추출하고, 비슷한 방향성의 답변끼리 그룹화한다. 각 그룹(items[])은 화면 인사이트 카드 한 장에 대응하며, 대표 요약과 개별 GitHub comment 아웃링크를 포함한다.",
         "operationId": "search_api_search_get",
         "parameters": [
           {
@@ -768,20 +768,19 @@
             },
             "type": "array",
             "title": "Reviewers",
-            "description": "대화에 참여한 리뷰어 GitHub ID 목록(중복 제거).",
+            "description": "응답 snippet에 포함된 공식 리뷰어 GitHub ID 목록(중복 제거).",
             "examples": [
               [
-                "robinjoon",
-                "yj9107v"
+                "robinjoon"
               ]
             ]
           },
           "snippet": {
             "type": "string",
             "title": "Snippet",
-            "description": "대화 본문 발췌. 화면에서 검색어 하이라이팅에 사용.",
+            "description": "공식 리뷰어가 작성한 답변 본문 발췌. 화면에서 검색어 하이라이팅에 사용.",
             "examples": [
-              "다른 정보 없이 메세지만 응답하게 설계한 이유가 있을까요?"
+              "에러 응답에는 클라이언트가 분기할 수 있는 구조화된 정보가 필요합니다."
             ]
           },
           "score": {
@@ -838,7 +837,7 @@
           "count": {
             "type": "integer",
             "title": "Count",
-            "description": "그룹에 묶인 문서 수.",
+            "description": "그룹에 묶인 리뷰어 답변 수.",
             "examples": [
               5
             ]
@@ -846,7 +845,7 @@
           "score": {
             "type": "number",
             "title": "Score",
-            "description": "그룹 대표 점수(대표 문서 기준).",
+            "description": "그룹 대표 점수(대표 답변 기준).",
             "examples": [
               0.87
             ]
@@ -858,6 +857,14 @@
             "type": "array",
             "title": "Documents",
             "description": "그룹에 묶인 문서 목록(상위 5개)."
+          },
+          "reviewerSections": {
+            "items": {
+              "$ref": "#/components/schemas/SearchReviewerSection"
+            },
+            "type": "array",
+            "title": "Reviewersections",
+            "description": "답변 방향성 그룹에 포함된 리뷰어별 개별 코멘트 목록."
           }
         },
         "type": "object",
@@ -867,7 +874,8 @@
           "representativeAnswer",
           "count",
           "score",
-          "documents"
+          "documents",
+          "reviewerSections"
         ],
         "title": "SearchGroup",
         "description": "비슷한 의도의 답변끼리 묶인 인사이트 카드 한 장."
@@ -905,22 +913,232 @@
                     "prTitle": "방탈출 예약 미션 1단계",
                     "repository": "woowacourse/spring-roomescape-member",
                     "reviewers": [
-                      "robinjoon",
-                      "yj9107v"
+                      "robinjoon"
                     ],
                     "score": 0.87,
-                    "snippet": "다른 정보 없이 메세지만 응답하게 설계한 이유가 있을까요?",
+                    "snippet": "에러 응답에는 클라이언트가 분기할 수 있는 구조화된 정보가 필요합니다.",
                     "track": "BACKEND"
                   }
                 ],
                 "groupId": "cluster-1",
                 "groupTitle": "에러 응답 구조",
                 "representativeAnswer": "에러 메시지만 내려주면 프론트엔드에서 상황별 분기 처리가 어렵습니다. errorCode나 HTTP 상태 코드 기반으로 응답을 구조화하라는 리뷰가 다수입니다. 클라이언트가 에러 유형을 명확히 구분하도록 하기 위함입니다.",
+                "reviewerSections": [
+                  {
+                    "commentCount": 1,
+                    "comments": [
+                      {
+                        "commentGithubId": 123456789,
+                        "content": "에러 응답에는 클라이언트가 분기할 수 있는 구조화된 정보가 필요합니다.",
+                        "conversationId": 123,
+                        "createdAt": "2026-05-21T08:26:36Z",
+                        "documentGithubUrl": "https://github.com/woowacourse/spring-roomescape-member/pull/42#discussion_r123",
+                        "filePath": "src/main/java/.../GlobalExceptionHandler.java",
+                        "githubUrl": "https://github.com/woowacourse/spring-roomescape-member/pull/42#discussion_r456",
+                        "lineNumber": 23,
+                        "prNumber": 42,
+                        "prTitle": "방탈출 예약 미션 1단계",
+                        "repository": "woowacourse/spring-roomescape-member",
+                        "score": 0.87,
+                        "snippet": "에러 응답에는 클라이언트가 분기할 수 있는 구조화된 정보가 필요합니다."
+                      }
+                    ],
+                    "nickname": "로빈",
+                    "reviewer": "robinjoon"
+                  }
+                ],
                 "score": 0.87
               }
             ]
           }
         ]
+      },
+      "SearchReviewerComment": {
+        "properties": {
+          "commentGithubId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commentgithubid",
+            "description": "GitHub review comment id.",
+            "examples": [
+              123456789
+            ]
+          },
+          "conversationId": {
+            "type": "integer",
+            "title": "Conversationid",
+            "description": "원본 conversation_documents.id.",
+            "examples": [
+              123
+            ]
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "공식 리뷰어가 작성한 원문 코멘트 본문."
+          },
+          "snippet": {
+            "type": "string",
+            "title": "Snippet",
+            "description": "화면 목록용 코멘트 발췌."
+          },
+          "githubUrl": {
+            "type": "string",
+            "title": "Githuburl",
+            "description": "개별 GitHub review comment 원문 링크.",
+            "examples": [
+              "https://github.com/woowacourse/spring-roomescape-member/pull/42#discussion_r456"
+            ]
+          },
+          "documentGithubUrl": {
+            "type": "string",
+            "title": "Documentgithuburl",
+            "description": "원본 conversation document 대표 GitHub 링크.",
+            "examples": [
+              "https://github.com/woowacourse/spring-roomescape-member/pull/42#discussion_r123"
+            ]
+          },
+          "repository": {
+            "type": "string",
+            "title": "Repository",
+            "description": "owner/name 형태.",
+            "examples": [
+              "woowacourse/spring-roomescape-member"
+            ]
+          },
+          "prNumber": {
+            "type": "integer",
+            "title": "Prnumber",
+            "examples": [
+              42
+            ]
+          },
+          "prTitle": {
+            "type": "string",
+            "title": "Prtitle",
+            "examples": [
+              "방탈출 예약 미션 1단계"
+            ]
+          },
+          "filePath": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filepath",
+            "examples": [
+              "src/main/java/.../GlobalExceptionHandler.java"
+            ]
+          },
+          "lineNumber": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linenumber",
+            "examples": [
+              23
+            ]
+          },
+          "createdAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdat",
+            "examples": [
+              "2026-05-21T08:26:36Z"
+            ]
+          },
+          "score": {
+            "type": "number",
+            "title": "Score",
+            "description": "답변 item 점수. answer_vector_score*0.8 + source_document_score*0.2."
+          }
+        },
+        "type": "object",
+        "required": [
+          "conversationId",
+          "content",
+          "snippet",
+          "githubUrl",
+          "documentGithubUrl",
+          "repository",
+          "prNumber",
+          "prTitle",
+          "score"
+        ],
+        "title": "SearchReviewerComment",
+        "description": "답변 방향성 그룹에 포함된 리뷰어 개별 코멘트."
+      },
+      "SearchReviewerSection": {
+        "properties": {
+          "reviewer": {
+            "type": "string",
+            "title": "Reviewer",
+            "description": "리뷰어 GitHub ID.",
+            "examples": [
+              "robinjoon"
+            ]
+          },
+          "nickname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nickname",
+            "description": "리뷰어 닉네임.",
+            "examples": [
+              "로빈"
+            ]
+          },
+          "commentCount": {
+            "type": "integer",
+            "title": "Commentcount",
+            "description": "해당 리뷰어의 코멘트 수.",
+            "examples": [
+              2
+            ]
+          },
+          "comments": {
+            "items": {
+              "$ref": "#/components/schemas/SearchReviewerComment"
+            },
+            "type": "array",
+            "title": "Comments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reviewer",
+          "commentCount",
+          "comments"
+        ],
+        "title": "SearchReviewerSection",
+        "description": "답변 방향성 그룹 안에서 리뷰어별로 묶은 코멘트 목록."
       },
       "TrackOption": {
         "properties": {

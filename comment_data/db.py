@@ -272,6 +272,37 @@ def fetch_review_comments_for_pr(
     return list(rows)
 
 
+def fetch_review_comments_by_github_ids(
+    connection: psycopg.Connection[Any],
+    *,
+    comment_github_ids: list[int],
+) -> list[dict[str, Any]]:
+    if not comment_github_ids:
+        return []
+
+    with connection.cursor() as cursor:
+        rows = cursor.execute(
+            """
+            SELECT
+                comment_github_id,
+                parent_github_id,
+                reviewer_id,
+                reviewer_avatar_url,
+                content,
+                github_url,
+                file_path,
+                line_number,
+                created_at,
+                updated_at
+            FROM review_comments
+            WHERE comment_github_id = ANY(%s)
+            ORDER BY created_at ASC, comment_github_id ASC
+            """,
+            (comment_github_ids,),
+        ).fetchall()
+    return list(rows)
+
+
 def delete_conversation_documents_for_pr(
     connection: psycopg.Connection[Any],
     *,

@@ -41,6 +41,43 @@ class SearchDocument(BaseModel):
     score: float = Field(description="문서 점수(0~1). vector_score*0.8 + text_score*0.2.", examples=[0.87])
 
 
+class SearchReviewerComment(BaseModel):
+    """답변 방향성 그룹에 포함된 리뷰어 개별 코멘트."""
+
+    commentGithubId: int | None = Field(
+        default=None,
+        description="GitHub review comment id.",
+        examples=[123456789],
+    )
+    conversationId: int = Field(description="원본 conversation_documents.id.", examples=[123])
+    content: str = Field(description="공식 리뷰어가 작성한 원문 코멘트 본문.")
+    snippet: str = Field(description="화면 목록용 코멘트 발췌.")
+    githubUrl: str = Field(
+        description="개별 GitHub review comment 원문 링크.",
+        examples=["https://github.com/woowacourse/spring-roomescape-member/pull/42#discussion_r456"],
+    )
+    documentGithubUrl: str = Field(
+        description="원본 conversation document 대표 GitHub 링크.",
+        examples=["https://github.com/woowacourse/spring-roomescape-member/pull/42#discussion_r123"],
+    )
+    repository: str = Field(description="owner/name 형태.", examples=["woowacourse/spring-roomescape-member"])
+    prNumber: int = Field(examples=[42])
+    prTitle: str = Field(examples=["방탈출 예약 미션 1단계"])
+    filePath: str | None = Field(default=None, examples=["src/main/java/.../GlobalExceptionHandler.java"])
+    lineNumber: int | None = Field(default=None, examples=[23])
+    createdAt: datetime | None = Field(default=None, examples=["2026-05-21T08:26:36Z"])
+    score: float = Field(description="답변 item 점수. answer_vector_score*0.8 + source_document_score*0.2.")
+
+
+class SearchReviewerSection(BaseModel):
+    """답변 방향성 그룹 안에서 리뷰어별로 묶은 코멘트 목록."""
+
+    reviewer: str = Field(description="리뷰어 GitHub ID.", examples=["robinjoon"])
+    nickname: str | None = Field(default=None, description="리뷰어 닉네임.", examples=["로빈"])
+    commentCount: int = Field(description="해당 리뷰어의 코멘트 수.", examples=[2])
+    comments: list[SearchReviewerComment]
+
+
 class SearchGroup(BaseModel):
     """비슷한 의도의 답변끼리 묶인 인사이트 카드 한 장."""
 
@@ -57,9 +94,12 @@ class SearchGroup(BaseModel):
             "클라이언트가 에러 유형을 명확히 구분하도록 하기 위함입니다."
         ],
     )
-    count: int = Field(description="그룹에 묶인 문서 수.", examples=[5])
-    score: float = Field(description="그룹 대표 점수(대표 문서 기준).", examples=[0.87])
+    count: int = Field(description="그룹에 묶인 리뷰어 답변 수.", examples=[5])
+    score: float = Field(description="그룹 대표 점수(대표 답변 기준).", examples=[0.87])
     documents: list[SearchDocument] = Field(description="그룹에 묶인 문서 목록(상위 5개).")
+    reviewerSections: list[SearchReviewerSection] = Field(
+        description="답변 방향성 그룹에 포함된 리뷰어별 개별 코멘트 목록."
+    )
 
 
 class SearchResponse(BaseModel):
@@ -97,6 +137,30 @@ class SearchResponse(BaseModel):
                                     "reviewers": ["robinjoon"],
                                     "snippet": "에러 응답에는 클라이언트가 분기할 수 있는 구조화된 정보가 필요합니다.",
                                     "score": 0.87,
+                                }
+                            ],
+                            "reviewerSections": [
+                                {
+                                    "reviewer": "robinjoon",
+                                    "nickname": "로빈",
+                                    "commentCount": 1,
+                                    "comments": [
+                                        {
+                                            "commentGithubId": 123456789,
+                                            "conversationId": 123,
+                                            "content": "에러 응답에는 클라이언트가 분기할 수 있는 구조화된 정보가 필요합니다.",
+                                            "snippet": "에러 응답에는 클라이언트가 분기할 수 있는 구조화된 정보가 필요합니다.",
+                                            "githubUrl": "https://github.com/woowacourse/spring-roomescape-member/pull/42#discussion_r456",
+                                            "documentGithubUrl": "https://github.com/woowacourse/spring-roomescape-member/pull/42#discussion_r123",
+                                            "repository": "woowacourse/spring-roomescape-member",
+                                            "prNumber": 42,
+                                            "prTitle": "방탈출 예약 미션 1단계",
+                                            "filePath": "src/main/java/.../GlobalExceptionHandler.java",
+                                            "lineNumber": 23,
+                                            "createdAt": "2026-05-21T08:26:36Z",
+                                            "score": 0.87,
+                                        }
+                                    ],
                                 }
                             ],
                         }

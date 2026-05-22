@@ -39,7 +39,9 @@ class OpenAIClient:
     ) -> dict[str, str]:
         snippets = []
         for index, document in enumerate(documents, start=1):
-            text = str(document.get("reviewer_answer_text") or document["document_text"])[:2500]
+            text = str(document.get("reviewer_answer_text") or document.get("content") or document["document_text"])[
+                :2500
+            ]
             snippets.append(
                 f"문서 {index}\n"
                 f"종류: {document['document_kind']}\n"
@@ -48,9 +50,9 @@ class OpenAIClient:
             )
 
         prompt = (
-            "사용자 질문과 관련된 코드리뷰 대화 묶음을 보고, 검색 결과 카드에 보여줄 "
+            "사용자 질문과 관련된 코드리뷰 답변 묶음을 보고, 검색 결과 카드에 보여줄 "
             "짧은 제목과 2-3문장 답변을 JSON으로 작성해줘.\n"
-            "원문에 없는 내용을 추측하지 말고, 여러 문서의 공통된 의도만 요약해.\n\n"
+            "원문에 없는 내용을 추측하지 말고, 여러 리뷰어 답변의 공통된 방향성만 요약해.\n\n"
             f"사용자 질문: {query}\n\n"
             + "\n\n---\n\n".join(snippets)
             + '\n\n출력 JSON 형식: {"title": "...", "answer": "..."}'

@@ -5,7 +5,7 @@ from typing import Any
 
 import psycopg
 
-from comment_data.db import fetch_search_documents
+from comment_data.db import fetch_review_comments_by_github_ids, fetch_search_documents
 from comment_data.openai_client import OpenAIClient
 from comment_data.reviewers import is_reviewer, reviewer_nickname
 
@@ -38,24 +38,24 @@ def search_conversations(
         max_candidates=max(options.limit * 30, 100),
     )
 
-    search_window = max(options.limit * 30, 100)
     scored = [score_document(candidate, query_embedding) for candidate in candidates]
     scored.sort(key=lambda item: item["score"], reverse=True)
-    clusters = cluster_documents(scored[:search_window])
+    scored = scored[: max(options.limit * 30, 100)]
+    comment_map = fetch_comment_map(connection, scored)
+    answer_items = extract_answer_items(scored, comment_map)
+    answer_items = embed_answer_items(client, options.embedding_model, query_embedding, answer_items)
+    answer_items.sort(key=lambda item: item["score"], reverse=True)
+    clusters = cluster_answer_items(answer_items)
 
     items = []
     for cluster in clusters:
-        reviewer_cluster = with_reviewer_answer_text(cluster)
-        if not reviewer_cluster:
-            continue
-
-        representative = reviewer_cluster[0]
-        summary = fallback_summary(options.query, representative, reviewer_cluster)
+        representative = cluster[0]
+        summary = fallback_summary(options.query, representative, cluster)
         if options.summarize:
             summary = client.summarize_cluster(
                 model=options.summary_model,
                 query=options.query,
-                documents=reviewer_cluster[:3],
+                documents=cluster[:3],
             )
 
         items.append(
@@ -63,9 +63,10 @@ def search_conversations(
                 "groupId": f"cluster-{len(items) + 1}",
                 "groupTitle": summary["title"],
                 "representativeAnswer": summary["answer"],
-                "count": len(reviewer_cluster),
+                "count": len(cluster),
                 "score": representative["score"],
-                "documents": [to_document_response(document) for document in reviewer_cluster[:5]],
+                "documents": documents_for_answer_cluster(cluster),
+                "reviewerSections": reviewer_sections_for_answer_cluster(cluster),
             }
         )
         if len(items) >= options.limit:
@@ -88,12 +89,12 @@ def score_document(document: dict[str, Any], query_embedding: list[float]) -> di
     return enriched
 
 
-def cluster_documents(documents: list[dict[str, Any]], threshold: float = 0.84) -> list[list[dict[str, Any]]]:
+def cluster_answer_items(answer_items: list[dict[str, Any]], threshold: float = 0.84) -> list[list[dict[str, Any]]]:
     clusters: list[list[dict[str, Any]]] = []
     centroids: list[list[float]] = []
 
-    for document in documents:
-        embedding = [float(value) for value in document["embedding"]]
+    for item in answer_items:
+        embedding = [float(value) for value in item["answer_embedding"]]
         best_index = None
         best_score = -1.0
         for index, centroid in enumerate(centroids):
@@ -103,10 +104,10 @@ def cluster_documents(documents: list[dict[str, Any]], threshold: float = 0.84) 
                 best_score = similarity
 
         if best_index is not None and best_score >= threshold:
-            clusters[best_index].append(document)
+            clusters[best_index].append(item)
             centroids[best_index] = average_embedding(centroids[best_index], embedding, len(clusters[best_index]))
         else:
-            clusters.append([document])
+            clusters.append([item])
             centroids.append(embedding)
 
     clusters.sort(key=lambda cluster: cluster[0]["score"], reverse=True)
@@ -118,7 +119,7 @@ def fallback_summary(query: str, representative: dict[str, Any], cluster: list[d
     title = extract_title(query, representative)
     answer = snippet
     if len(cluster) > 1:
-        answer = f"비슷한 리뷰 대화 {len(cluster)}건이 있습니다. 대표 내용: {snippet}"
+        answer = f"비슷한 리뷰어 답변 {len(cluster)}건이 있습니다. 대표 내용: {snippet}"
     return {"title": title, "answer": answer}
 
 
@@ -137,16 +138,88 @@ def make_snippet(text: str, limit: int = 1000) -> str:
     return cleaned[:limit].rstrip() + "..."
 
 
-def with_reviewer_answer_text(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    reviewer_documents = []
+def fetch_comment_map(
+    connection: psycopg.Connection[Any],
+    documents: list[dict[str, Any]],
+) -> dict[int, dict[str, Any]]:
+    comment_ids = sorted(
+        {
+            int(comment_id)
+            for document in documents
+            for comment_id in document.get("comment_github_ids", [])
+            if comment_id is not None
+        }
+    )
+    comments = fetch_review_comments_by_github_ids(connection, comment_github_ids=comment_ids)
+    return {int(comment["comment_github_id"]): comment for comment in comments}
+
+
+def extract_answer_items(
+    documents: list[dict[str, Any]],
+    comment_map: dict[int, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    items = []
     for document in documents:
-        answer_text = extract_reviewer_answer_text(document["document_text"])
-        if not answer_text:
-            continue
-        enriched = dict(document)
-        enriched["reviewer_answer_text"] = answer_text
-        reviewer_documents.append(enriched)
-    return reviewer_documents
+        blocks = split_comment_blocks(document["document_text"])
+        comment_ids = [int(comment_id) for comment_id in document.get("comment_github_ids", [])]
+        for index, block in enumerate(blocks):
+            parsed = parse_comment_block(block)
+            if parsed is None or not is_reviewer(parsed["reviewer"]):
+                continue
+
+            comment_id = comment_ids[index] if index < len(comment_ids) else None
+            comment = comment_map.get(comment_id) if comment_id is not None else None
+            content = str((comment or {}).get("content") or parsed["content"]).strip()
+            if not content:
+                continue
+
+            reviewer = str((comment or {}).get("reviewer_id") or parsed["reviewer"])
+            if not is_reviewer(reviewer):
+                continue
+
+            items.append(
+                {
+                    **document,
+                    "answer_id": f"{document['id']}:{comment_id or index}",
+                    "comment_github_id": comment_id,
+                    "reviewer": reviewer,
+                    "reviewer_nickname": reviewer_nickname(reviewer),
+                    "reviewer_answer_text": content,
+                    "comment_github_url": (comment or {}).get("github_url") or document["github_url"],
+                    "comment_file_path": (comment or {}).get("file_path") or document["file_path"],
+                    "comment_line_number": (comment or {}).get("line_number") or document["line_number"],
+                    "comment_created_at": (comment or {}).get("created_at"),
+                    "comment_updated_at": (comment or {}).get("updated_at"),
+                    "document_github_url": document["github_url"],
+                    "source_document_score": document["score"],
+                    "source_vector_score": document["vector_score"],
+                }
+            )
+    return items
+
+
+def embed_answer_items(
+    client: OpenAIClient,
+    embedding_model: str,
+    query_embedding: list[float],
+    answer_items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not answer_items:
+        return []
+
+    embeddings = client.create_embeddings(
+        model=embedding_model,
+        inputs=[item["reviewer_answer_text"] for item in answer_items],
+    )
+    enriched_items = []
+    for item, embedding in zip(answer_items, embeddings, strict=True):
+        vector_score = cosine_similarity(query_embedding, embedding)
+        enriched = dict(item)
+        enriched["answer_embedding"] = embedding
+        enriched["answer_vector_score"] = vector_score
+        enriched["score"] = vector_score * 0.8 + float(item["source_document_score"]) * 0.2
+        enriched_items.append(enriched)
+    return enriched_items
 
 
 def representative_answer_text(document: dict[str, Any]) -> str:
@@ -187,9 +260,82 @@ def parse_comment_block(block: str) -> dict[str, str] | None:
     return {"reviewer": reviewer_match.group("reviewer"), "content": content}
 
 
+def documents_for_answer_cluster(cluster: list[dict[str, Any]], limit: int = 5) -> list[dict[str, Any]]:
+    documents = []
+    by_document_id: dict[int, list[dict[str, Any]]] = {}
+    for item in cluster:
+        document_id = int(item["id"])
+        by_document_id.setdefault(document_id, []).append(item)
+
+    for document_items in by_document_id.values():
+        representative = dict(document_items[0])
+        representative["cluster_reviewers"] = sorted({item["reviewer"] for item in document_items})
+        representative["reviewer_answer_text"] = "\n\n---\n\n".join(
+            item["reviewer_answer_text"] for item in document_items
+        )
+        documents.append(to_document_response(representative))
+        if len(documents) >= limit:
+            break
+    return documents
+
+
+def reviewer_sections_for_answer_cluster(cluster: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    first_seen_order: list[str] = []
+
+    for item in cluster:
+        reviewer = item["reviewer"]
+        if reviewer not in grouped:
+            grouped[reviewer] = []
+            first_seen_order.append(reviewer)
+        grouped[reviewer].append(item)
+
+    sections = []
+    for reviewer in first_seen_order:
+        comments = sorted(grouped[reviewer], key=answer_item_sort_key)
+        sections.append(
+            {
+                "reviewer": reviewer,
+                "nickname": reviewer_nickname(reviewer),
+                "commentCount": len(comments),
+                "comments": [to_reviewer_comment_response(comment) for comment in comments],
+            }
+        )
+    return sections
+
+
+def answer_item_sort_key(item: dict[str, Any]) -> tuple[float, str, int]:
+    created_at = item.get("comment_created_at")
+    comment_github_id = item.get("comment_github_id") or 0
+    created_at_key = created_at.isoformat() if created_at else ""
+    return (-float(item["score"]), created_at_key, int(comment_github_id))
+
+
+def to_reviewer_comment_response(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "commentGithubId": item["comment_github_id"],
+        "conversationId": item["id"],
+        "content": item["reviewer_answer_text"],
+        "snippet": make_snippet(item["reviewer_answer_text"]),
+        "githubUrl": item["comment_github_url"],
+        "documentGithubUrl": item["document_github_url"],
+        "repository": item["repository"],
+        "prNumber": item["pr_number"],
+        "prTitle": item["pr_title"],
+        "filePath": item["comment_file_path"],
+        "lineNumber": item["comment_line_number"],
+        "createdAt": item["comment_created_at"],
+        "score": item["score"],
+    }
+
+
 def to_document_response(document: dict[str, Any]) -> dict[str, Any]:
     metadata = document.get("metadata") or {}
-    reviewers = [reviewer for reviewer in metadata.get("reviewers", []) if is_reviewer(reviewer)]
+    reviewers = document.get("cluster_reviewers")
+    if reviewers is None:
+        reviewers = [reviewer for reviewer in metadata.get("reviewers", []) if is_reviewer(reviewer)]
+    if document.get("reviewer") and document["reviewer"] not in reviewers:
+        reviewers = [document["reviewer"], *reviewers]
     return {
         "id": document["id"],
         "kind": document["document_kind"],
@@ -198,9 +344,9 @@ def to_document_response(document: dict[str, Any]) -> dict[str, Any]:
         "repository": document["repository"],
         "prNumber": document["pr_number"],
         "prTitle": document["pr_title"],
-        "githubUrl": document["github_url"],
-        "filePath": document["file_path"],
-        "lineNumber": document["line_number"],
+        "githubUrl": document.get("document_github_url") or document["github_url"],
+        "filePath": document.get("comment_file_path") or document["file_path"],
+        "lineNumber": document.get("comment_line_number") or document["line_number"],
         "reviewers": reviewers,
         "snippet": make_snippet(representative_answer_text(document)),
         "score": document["score"],
