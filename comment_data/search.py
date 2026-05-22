@@ -19,6 +19,7 @@ class SearchOptions:
     limit: int
     summarize: bool
     embedding_model: str
+    classification_model: str
     summary_model: str
 
 
@@ -46,12 +47,16 @@ def search_conversations(
     answer_items = embed_answer_items(client, options.embedding_model, query_embedding, answer_items)
     answer_items.sort(key=lambda item: item["score"], reverse=True)
     answer_items = answer_items[: options.limit]
-    clusters = cluster_answer_items(answer_items)
+    clusters = classify_answer_items(client, options.classification_model, options.query, answer_items)
 
     items = []
     for cluster in clusters:
         representative = cluster[0]
-        summary = fallback_summary(options.query, representative, cluster)
+        fallback = fallback_summary(options.query, representative, cluster)
+        summary = {
+            "title": representative.get("classification_title") or fallback["title"],
+            "answer": representative.get("classification_summary") or fallback["answer"],
+        }
         if options.summarize:
             summary = client.summarize_cluster(
                 model=options.summary_model,
@@ -88,26 +93,43 @@ def score_document(document: dict[str, Any], query_embedding: list[float]) -> di
     return enriched
 
 
-def cluster_answer_items(answer_items: list[dict[str, Any]], threshold: float = 0.84) -> list[list[dict[str, Any]]]:
+def classify_answer_items(
+    client: OpenAIClient,
+    classification_model: str,
+    query: str,
+    answer_items: list[dict[str, Any]],
+) -> list[list[dict[str, Any]]]:
+    items_by_id = {item["answer_id"]: item for item in answer_items}
+    classifications = client.classify_answer_groups(model=classification_model, query=query, answers=answer_items)
+
     clusters: list[list[dict[str, Any]]] = []
-    centroids: list[list[float]] = []
+    assigned_ids: set[str] = set()
+    for index, classification in enumerate(classifications, start=1):
+        cluster = []
+        for answer_id in classification["answerIds"]:
+            if answer_id in assigned_ids:
+                continue
+            item = items_by_id.get(answer_id)
+            if item is None:
+                continue
+            assigned_ids.add(answer_id)
+            enriched = dict(item)
+            enriched["classification_group_key"] = classification["groupKey"] or f"group-{index}"
+            enriched["classification_title"] = classification["title"]
+            enriched["classification_summary"] = classification["summary"]
+            cluster.append(enriched)
+        if cluster:
+            clusters.append(cluster)
 
     for item in answer_items:
-        embedding = [float(value) for value in item["answer_embedding"]]
-        best_index = None
-        best_score = -1.0
-        for index, centroid in enumerate(centroids):
-            similarity = cosine_similarity(embedding, centroid)
-            if similarity > best_score:
-                best_index = index
-                best_score = similarity
-
-        if best_index is not None and best_score >= threshold:
-            clusters[best_index].append(item)
-            centroids[best_index] = average_embedding(centroids[best_index], embedding, len(clusters[best_index]))
-        else:
-            clusters.append([item])
-            centroids.append(embedding)
+        if item["answer_id"] in assigned_ids:
+            continue
+        enriched = dict(item)
+        fallback = fallback_summary(query, item, [item])
+        enriched["classification_group_key"] = f"ungrouped-{len(clusters) + 1}"
+        enriched["classification_title"] = fallback["title"]
+        enriched["classification_summary"] = fallback["answer"]
+        clusters.append([enriched])
 
     clusters.sort(key=lambda cluster: cluster[0]["score"], reverse=True)
     return clusters
@@ -359,8 +381,3 @@ def cosine_similarity(left: list[float], right: list[float]) -> float:
     if left_norm == 0 or right_norm == 0:
         return 0.0
     return dot / (left_norm * right_norm)
-
-
-def average_embedding(current: list[float], new: list[float], count: int) -> list[float]:
-    previous_count = count - 1
-    return [((value * previous_count) + new[index]) / count for index, value in enumerate(current)]

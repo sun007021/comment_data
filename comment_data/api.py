@@ -27,6 +27,16 @@ from comment_data.search import SearchOptions, search_conversations
 load_dotenv(Path(".env"))
 
 
+def log_model_settings() -> None:
+    print(
+        "OpenAI models: "
+        f"embedding={os.getenv('OPENAI_EMBEDDING_MODEL', 'text-embedding-3-small')}, "
+        f"classification={os.getenv('OPENAI_CLASSIFICATION_MODEL', 'gpt-5.4-mini')}, "
+        f"summary={os.getenv('OPENAI_SUMMARY_MODEL', 'gpt-5.4-mini')}",
+        flush=True,
+    )
+
+
 def get_cors_origins() -> list[str]:
     value = os.getenv(
         "CORS_ORIGINS",
@@ -47,6 +57,7 @@ app = FastAPI(
         "그룹화하여 요약(2-3문장)과 PR 원문 링크를 함께 제공하는 API."
     ),
 )
+log_model_settings()
 
 app.add_middleware(
     CORSMiddleware,
@@ -85,7 +96,8 @@ def search(
 ) -> dict[str, Any]:
     database_url = require_env("DATABASE_URL")
     embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
-    summary_model = os.getenv("OPENAI_SUMMARY_MODEL", "gpt-5.2")
+    classification_model = os.getenv("OPENAI_CLASSIFICATION_MODEL", "gpt-5.4-mini")
+    summary_model = os.getenv("OPENAI_SUMMARY_MODEL", "gpt-5.4-mini")
     client = OpenAIClient(require_env("OPENAI_API_KEY"))
 
     with connect(database_url) as connection:
@@ -101,6 +113,7 @@ def search(
                 limit=limit,
                 summarize=summarize,
                 embedding_model=embedding_model,
+                classification_model=classification_model,
                 summary_model=summary_model,
             ),
         )

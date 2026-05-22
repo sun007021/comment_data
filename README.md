@@ -140,9 +140,10 @@ reviewer: reviewer-id
 1. 사용자 query의 embedding 생성
 2. 저장된 conversation embedding과 cosine similarity 계산
 3. PostgreSQL full-text 점수를 보정값으로 합산
-4. 유사한 conversation끼리 클러스터링
-5. 각 클러스터를 GPT로 짧게 요약
-6. 상세 대화는 `/api/conversations/{id}`에서 조회
+4. 검색 후보에서 공식 리뷰어의 개별 답변 코멘트만 추출
+5. `OPENAI_CLASSIFICATION_MODEL`로 답변의 피드백 방향성을 분류해 그룹화
+6. `summarize=true`이면 `OPENAI_SUMMARY_MODEL`로 각 그룹을 짧게 요약
+7. 상세 대화는 `/api/conversations/{id}`에서 조회
 
 ## 수집 대상 설정
 
