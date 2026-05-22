@@ -7,6 +7,7 @@ import psycopg
 
 from comment_data.db import fetch_search_documents
 from comment_data.openai_client import OpenAIClient
+from comment_data.reviewers import is_reviewer, reviewer_nickname
 
 
 @dataclass(frozen=True)
@@ -37,31 +38,38 @@ def search_conversations(
         max_candidates=max(options.limit * 30, 100),
     )
 
+    search_window = max(options.limit * 30, 100)
     scored = [score_document(candidate, query_embedding) for candidate in candidates]
     scored.sort(key=lambda item: item["score"], reverse=True)
-    clusters = cluster_documents(scored[: max(options.limit * 8, 40)])
+    clusters = cluster_documents(scored[:search_window])
 
     items = []
-    for index, cluster in enumerate(clusters[: options.limit], start=1):
-        representative = cluster[0]
-        summary = fallback_summary(options.query, representative, cluster)
+    for cluster in clusters:
+        reviewer_cluster = with_reviewer_answer_text(cluster)
+        if not reviewer_cluster:
+            continue
+
+        representative = reviewer_cluster[0]
+        summary = fallback_summary(options.query, representative, reviewer_cluster)
         if options.summarize:
             summary = client.summarize_cluster(
                 model=options.summary_model,
                 query=options.query,
-                documents=cluster[:3],
+                documents=reviewer_cluster[:3],
             )
 
         items.append(
             {
-                "groupId": f"cluster-{index}",
+                "groupId": f"cluster-{len(items) + 1}",
                 "groupTitle": summary["title"],
                 "representativeAnswer": summary["answer"],
-                "count": len(cluster),
+                "count": len(reviewer_cluster),
                 "score": representative["score"],
-                "documents": [to_document_response(document) for document in cluster[:5]],
+                "documents": [to_document_response(document) for document in reviewer_cluster[:5]],
             }
         )
+        if len(items) >= options.limit:
+            break
 
     return {"items": items}
 
@@ -106,7 +114,7 @@ def cluster_documents(documents: list[dict[str, Any]], threshold: float = 0.84) 
 
 
 def fallback_summary(query: str, representative: dict[str, Any], cluster: list[dict[str, Any]]) -> dict[str, str]:
-    snippet = make_snippet(representative["document_text"])
+    snippet = make_snippet(representative_answer_text(representative))
     title = extract_title(query, representative)
     answer = snippet
     if len(cluster) > 1:
@@ -129,8 +137,59 @@ def make_snippet(text: str, limit: int = 1000) -> str:
     return cleaned[:limit].rstrip() + "..."
 
 
+def with_reviewer_answer_text(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    reviewer_documents = []
+    for document in documents:
+        answer_text = extract_reviewer_answer_text(document["document_text"])
+        if not answer_text:
+            continue
+        enriched = dict(document)
+        enriched["reviewer_answer_text"] = answer_text
+        reviewer_documents.append(enriched)
+    return reviewer_documents
+
+
+def representative_answer_text(document: dict[str, Any]) -> str:
+    return str(document.get("reviewer_answer_text") or document["document_text"])
+
+
+def extract_reviewer_answer_text(document_text: str) -> str:
+    blocks = []
+    for block in split_comment_blocks(document_text):
+        parsed = parse_comment_block(block)
+        if parsed is None or not is_reviewer(parsed["reviewer"]):
+            continue
+        nickname = reviewer_nickname(parsed["reviewer"])
+        reviewer_label = parsed["reviewer"]
+        if nickname:
+            reviewer_label = f"{reviewer_label} ({nickname})"
+        blocks.append(f"reviewer: {reviewer_label}\n\n{parsed['content']}")
+    return "\n\n---\n\n".join(blocks)
+
+
+def split_comment_blocks(document_text: str) -> list[str]:
+    return [block.strip() for block in re.split(r"\n\s*---\s*\n", document_text) if block.strip()]
+
+
+def parse_comment_block(block: str) -> dict[str, str] | None:
+    reviewer_match = re.search(r"^reviewer:\s*(?P<reviewer>\S+)\s*$", block, flags=re.MULTILINE)
+    if not reviewer_match:
+        return None
+
+    content_match = re.search(r"\n\s*\n(?P<content>.*)\Z", block, flags=re.DOTALL)
+    if not content_match:
+        return None
+
+    content = content_match.group("content").strip()
+    if not content:
+        return None
+
+    return {"reviewer": reviewer_match.group("reviewer"), "content": content}
+
+
 def to_document_response(document: dict[str, Any]) -> dict[str, Any]:
     metadata = document.get("metadata") or {}
+    reviewers = [reviewer for reviewer in metadata.get("reviewers", []) if is_reviewer(reviewer)]
     return {
         "id": document["id"],
         "kind": document["document_kind"],
@@ -142,8 +201,8 @@ def to_document_response(document: dict[str, Any]) -> dict[str, Any]:
         "githubUrl": document["github_url"],
         "filePath": document["file_path"],
         "lineNumber": document["line_number"],
-        "reviewers": metadata.get("reviewers", []),
-        "snippet": make_snippet(document["document_text"]),
+        "reviewers": reviewers,
+        "snippet": make_snippet(representative_answer_text(document)),
         "score": document["score"],
     }
 

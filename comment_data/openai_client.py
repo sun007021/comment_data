@@ -39,7 +39,7 @@ class OpenAIClient:
     ) -> dict[str, str]:
         snippets = []
         for index, document in enumerate(documents, start=1):
-            text = str(document["document_text"])[:2500]
+            text = str(document.get("reviewer_answer_text") or document["document_text"])[:2500]
             snippets.append(
                 f"문서 {index}\n"
                 f"종류: {document['document_kind']}\n"

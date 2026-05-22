@@ -31,12 +31,12 @@ class SearchDocument(BaseModel):
     filePath: str | None = Field(default=None, examples=["src/main/java/.../GlobalExceptionHandler.java"])
     lineNumber: int | None = Field(default=None, examples=[23])
     reviewers: list[str] = Field(
-        description="대화에 참여한 리뷰어 GitHub ID 목록(중복 제거).",
-        examples=[["robinjoon", "yj9107v"]],
+        description="응답 snippet에 포함된 공식 리뷰어 GitHub ID 목록(중복 제거).",
+        examples=[["robinjoon"]],
     )
     snippet: str = Field(
-        description="대화 본문 발췌. 화면에서 검색어 하이라이팅에 사용.",
-        examples=["다른 정보 없이 메세지만 응답하게 설계한 이유가 있을까요?"],
+        description="공식 리뷰어가 작성한 답변 본문 발췌. 화면에서 검색어 하이라이팅에 사용.",
+        examples=["에러 응답에는 클라이언트가 분기할 수 있는 구조화된 정보가 필요합니다."],
     )
     score: float = Field(description="문서 점수(0~1). vector_score*0.8 + text_score*0.2.", examples=[0.87])
 
@@ -94,8 +94,8 @@ class SearchResponse(BaseModel):
                                     "githubUrl": "https://github.com/woowacourse/spring-roomescape-member/pull/42#discussion_r123",
                                     "filePath": "src/main/java/.../GlobalExceptionHandler.java",
                                     "lineNumber": 23,
-                                    "reviewers": ["robinjoon", "yj9107v"],
-                                    "snippet": "다른 정보 없이 메세지만 응답하게 설계한 이유가 있을까요?",
+                                    "reviewers": ["robinjoon"],
+                                    "snippet": "에러 응답에는 클라이언트가 분기할 수 있는 구조화된 정보가 필요합니다.",
                                     "score": 0.87,
                                 }
                             ],
