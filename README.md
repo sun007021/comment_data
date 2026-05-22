@@ -56,6 +56,12 @@ docker compose run --rm --build collector embed-documents
 docker compose up --build api
 ```
 
+프론트엔드에서 CORS가 발생하면 `.env`의 `CORS_ORIGINS`에 프론트 주소를 추가합니다.
+
+```env
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:5175,https://techocon-web-vercel.vercel.app
+```
+
 검색 요청 예시:
 
 ```bash
