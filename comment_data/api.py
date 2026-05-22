@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from comment_data.cli import load_dotenv
 from comment_data.db import (
@@ -25,6 +26,17 @@ from comment_data.search import SearchOptions, search_conversations
 
 load_dotenv(Path(".env"))
 
+
+def get_cors_origins() -> list[str]:
+    value = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000,"
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:8080,http://127.0.0.1:8080",
+    )
+    return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+
 app = FastAPI(
     title="PR Insight API",
     version="0.1.0",
@@ -32,6 +44,14 @@ app = FastAPI(
         "우테코 미션 PR 리뷰 코멘트를 자연어로 검색하고, 비슷한 의도의 답변끼리 "
         "그룹화하여 요약(2-3문장)과 PR 원문 링크를 함께 제공하는 API."
     ),
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
