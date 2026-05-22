@@ -1,0 +1,17 @@
+[project]
+name = "comment-data"
+version = "0.1.0"
+description = "Collect Woowacourse pull request review comments into PostgreSQL"
+requires-python = ">=3.13"
+dependencies = [
+    "psycopg[binary]>=3.2.0",
+    "PyYAML>=6.0.2",
+    "requests>=2.32.0",
+]
+
+[project.scripts]
+comment-data = "comment_data.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

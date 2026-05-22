@@ -1,0 +1,2 @@
+"""PR review comment collector."""
+
