@@ -122,7 +122,7 @@ def extract_title(query: str, document: dict[str, Any]) -> str:
     return " ".join(words[:4]) or "관련 리뷰"
 
 
-def make_snippet(text: str, limit: int = 220) -> str:
+def make_snippet(text: str, limit: int = 1000) -> str:
     cleaned = re.sub(r"\s+", " ", text).strip()
     if len(cleaned) <= limit:
         return cleaned

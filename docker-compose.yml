@@ -43,8 +43,10 @@ services:
       OPENAI_SUMMARY_MODEL: ${OPENAI_SUMMARY_MODEL:-gpt-5.2}
     ports:
       - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./comment_data:/app/comment_data:ro
     entrypoint: ["uvicorn"]
-    command: ["comment_data.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["comment_data.api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     depends_on:
       db:
         condition: service_healthy
