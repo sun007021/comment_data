@@ -23,9 +23,28 @@ services:
       - tools
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-comment_data}:${POSTGRES_PASSWORD:-comment_data_password}@db:5432/${POSTGRES_DB:-comment_data}
-      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      OPENAI_SUMMARY_MODEL: ${OPENAI_SUMMARY_MODEL:-gpt-5.2}
     volumes:
       - ./missions.yml:/app/missions.yml:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-comment_data}:${POSTGRES_PASSWORD:-comment_data_password}@db:5432/${POSTGRES_DB:-comment_data}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      OPENAI_SUMMARY_MODEL: ${OPENAI_SUMMARY_MODEL:-gpt-5.2}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    entrypoint: ["uvicorn"]
+    command: ["comment_data.api:app", "--host", "0.0.0.0", "--port", "8000"]
     depends_on:
       db:
         condition: service_healthy

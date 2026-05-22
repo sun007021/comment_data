@@ -4,9 +4,11 @@ version = "0.1.0"
 description = "Collect Woowacourse pull request review comments into PostgreSQL"
 requires-python = ">=3.13"
 dependencies = [
+    "fastapi>=0.124.0",
     "psycopg[binary]>=3.2.0",
     "PyYAML>=6.0.2",
     "requests>=2.32.0",
+    "uvicorn[standard]>=0.38.0",
 ]
 
 [project.scripts]

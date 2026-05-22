@@ -76,6 +76,7 @@ def insert_document(
         root_comment_github_id=int(root["comment_github_id"]),
         document_kind=document_kind,
         document_text=build_document_text(conversation),
+        embedding_text=build_embedding_text(conversation),
         github_url=root["github_url"],
         file_path=root["file_path"],
         line_number=root["line_number"],
@@ -96,6 +97,16 @@ def build_document_text(conversation: list[dict[str, Any]]) -> str:
         content = comment["content"].strip()
         blocks.append(f"[{label}]\nreviewer: {reviewer}\ncreated_at: {created_at}\n\n{content}")
     return "\n\n---\n\n".join(blocks)
+
+
+def build_embedding_text(conversation: list[dict[str, Any]]) -> str:
+    lines: list[str] = []
+    for index, comment in enumerate(conversation):
+        label = "맥락" if index == 0 else "답변"
+        reviewer = comment["reviewer_id"]
+        content = comment["content"].strip()
+        lines.append(f"{label} 작성자: {reviewer}\n{label} 내용:\n{content}")
+    return "\n\n".join(lines)
 
 
 def comment_sort_key(comment: dict[str, Any]) -> tuple[Any, int]:

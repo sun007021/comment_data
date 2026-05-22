@@ -19,6 +19,13 @@ def main() -> None:
     collect_parser.add_argument("--full-refresh", action="store_true")
     collect_parser.add_argument("--pr-limit", type=int, default=50)
 
+    embed_parser = subparsers.add_parser("embed-documents", help="Create embeddings for conversation documents")
+    embed_parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"))
+    embed_parser.add_argument("--openai-api-key", default=os.getenv("OPENAI_API_KEY"))
+    embed_parser.add_argument("--model", default=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"))
+    embed_parser.add_argument("--batch-size", type=int, default=64)
+    embed_parser.add_argument("--limit", type=int, default=10_000)
+
     args = parser.parse_args()
 
     if args.command == "init-db":
@@ -58,6 +65,27 @@ def main() -> None:
                     f"conversation_documents={result.conversation_documents}, "
                     f"since={since_text}"
                 )
+        return
+
+    if args.command == "embed-documents":
+        from comment_data.db import connect, init_db
+        from comment_data.embeddings import embed_conversation_documents
+        from comment_data.openai_client import OpenAIClient
+
+        database_url = require_value(args.database_url, "DATABASE_URL")
+        openai_api_key = require_value(args.openai_api_key, "OPENAI_API_KEY")
+        client = OpenAIClient(openai_api_key)
+
+        with connect(database_url) as connection:
+            init_db(connection)
+            result = embed_conversation_documents(
+                connection,
+                client,
+                model=args.model,
+                batch_size=args.batch_size,
+                limit=args.limit,
+            )
+        print(f"Embedded conversation documents: {result.embedded}")
 
 
 def require_value(value: str | None, name: str) -> str:
