@@ -3,3 +3,13 @@ missions:
     name: roomescape
     repository:
       url: https://github.com/woowacourse/spring-roomescape-member
+
+  - track: ANDROID
+    name: shopping-order
+    repository:
+      url: https://github.com/woowacourse/android-shopping-order
+
+  - track: FRONTEND
+    name: payments
+    repository:
+      url: https://github.com/woowacourse/react-payments
