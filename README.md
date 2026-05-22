@@ -65,13 +65,13 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:5175,h
 검색 요청 예시:
 
 ```bash
-curl 'http://localhost:8000/api/search?query=500에러%20예외처리시%20응답%20구조&track=BACKEND&limit=5'
+curl 'http://localhost:8000/api/search?query=500에러%20예외처리시%20응답%20구조&track=BACKEND&limit=30'
 ```
 
 GPT 요약 없이 embedding 기반 대표 문구만 보고 싶다면 `summarize=false`를 붙입니다.
 
 ```bash
-curl 'http://localhost:8000/api/search?query=500에러%20예외처리시%20응답%20구조&track=BACKEND&limit=5&summarize=false'
+curl 'http://localhost:8000/api/search?query=500에러%20예외처리시%20응답%20구조&track=BACKEND&limit=30&summarize=false'
 ```
 
 대화 상세 조회:

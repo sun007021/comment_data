@@ -80,7 +80,7 @@ def search(
     repository: str | None = Query(
         default=None, description="레포지토리 풀네임 필터", examples=["woowacourse/spring-roomescape-member"]
     ),
-    limit: int = Query(default=5, ge=1, le=50, description="반환할 최대 그룹 수"),
+    limit: int = Query(default=30, ge=1, le=100, description="그룹화에 사용할 최대 리뷰어 답변 코멘트 수"),
     summarize: bool = Query(default=True, description="true면 GPT로 그룹 제목/요약 생성, false면 대표 snippet 사용"),
 ) -> dict[str, Any]:
     database_url = require_env("DATABASE_URL")

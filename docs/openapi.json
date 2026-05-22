@@ -120,13 +120,13 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 50,
+              "maximum": 100,
               "minimum": 1,
-              "description": "반환할 최대 그룹 수",
-              "default": 5,
+              "description": "그룹화에 사용할 최대 리뷰어 답변 코멘트 수",
+              "default": 30,
               "title": "Limit"
             },
-            "description": "반환할 최대 그룹 수"
+            "description": "그룹화에 사용할 최대 리뷰어 답변 코멘트 수"
           },
           {
             "name": "summarize",

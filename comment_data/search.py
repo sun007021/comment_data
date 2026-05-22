@@ -45,6 +45,7 @@ def search_conversations(
     answer_items = extract_answer_items(scored, comment_map)
     answer_items = embed_answer_items(client, options.embedding_model, query_embedding, answer_items)
     answer_items.sort(key=lambda item: item["score"], reverse=True)
+    answer_items = answer_items[: options.limit]
     clusters = cluster_answer_items(answer_items)
 
     items = []
@@ -69,8 +70,6 @@ def search_conversations(
                 "reviewerSections": reviewer_sections_for_answer_cluster(cluster),
             }
         )
-        if len(items) >= options.limit:
-            break
 
     return {"items": items}
 
