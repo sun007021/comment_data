@@ -1,0 +1,76 @@
+services:
+  db:
+    image: postgres:16
+    container_name: comment-data-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-comment_data}
+      POSTGRES_USER: ${POSTGRES_USER:-comment_data}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-comment_data_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-comment_data} -d ${POSTGRES_DB:-comment_data}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  collector:
+    build:
+      context: .
+    profiles:
+      - tools
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-comment_data}:${POSTGRES_PASSWORD:-comment_data_password}@db:5432/${POSTGRES_DB:-comment_data}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      OPENAI_CLASSIFICATION_MODEL: ${OPENAI_CLASSIFICATION_MODEL:-gpt-5.4-mini}
+      OPENAI_SUMMARY_MODEL: ${OPENAI_SUMMARY_MODEL:-gpt-5.4-mini}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://techocon-web-vercel.vercel.app}
+    volumes:
+      - ./missions.yml:/app/missions.yml:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-comment_data}:${POSTGRES_PASSWORD:-comment_data_password}@db:5432/${POSTGRES_DB:-comment_data}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      OPENAI_CLASSIFICATION_MODEL: ${OPENAI_CLASSIFICATION_MODEL:-gpt-5.4-mini}
+      OPENAI_SUMMARY_MODEL: ${OPENAI_SUMMARY_MODEL:-gpt-5.4-mini}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://techocon-web-vercel.vercel.app}
+    entrypoint: ["uvicorn"]
+    command:
+      - "comment_data.api:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--workers"
+      - "${UVICORN_WORKERS:-2}"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: comment-data-nginx
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
